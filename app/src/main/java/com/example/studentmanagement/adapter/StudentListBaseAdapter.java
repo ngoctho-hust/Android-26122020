@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.CheckBox;
 import android.widget.Filter;
 import android.widget.Filterable;
 import android.widget.TextView;
@@ -19,11 +20,13 @@ public class StudentListBaseAdapter extends BaseAdapter implements Filterable {
     Context context;
     List<Student> items;
     List<Student> itemsFiltered;
+    boolean[] itemsChecked;
 
     public StudentListBaseAdapter(Context context, List<Student> items) {
         this.context = context;
         this.items = items;
         this.itemsFiltered = items;
+        this.itemsChecked = new boolean[items.size()];
     }
 
     @Override
@@ -51,6 +54,7 @@ public class StudentListBaseAdapter extends BaseAdapter implements Filterable {
             viewHolder.txtMssv = convertView.findViewById(R.id.txt_mssv);
             viewHolder.txtHoten = convertView.findViewById(R.id.txt_hoten);
             viewHolder.txtEmail = convertView.findViewById(R.id.txt_email);
+            viewHolder.cbSelect = convertView.findViewById(R.id.cb_select);
 
             Student item = itemsFiltered.get(position);
             viewHolder.txtMssv.setText(item.getMssv());
@@ -67,12 +71,21 @@ public class StudentListBaseAdapter extends BaseAdapter implements Filterable {
             viewHolder.txtEmail.setText(item.getEmail());
         }
 
+        viewHolder.cbSelect.setChecked(itemsChecked[position]);
+
+        viewHolder.cbSelect.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                itemsChecked[position] = viewHolder.cbSelect.isChecked();
+            }
+        });
         return convertView;
     }
 
     @Override
     public Filter getFilter() {
-        Filter searchFilter = new Filter() {
+
+        return new Filter() {
             @Override
             protected FilterResults performFiltering(CharSequence constraint) {
                 FilterResults filterResults = new FilterResults();
@@ -101,11 +114,10 @@ public class StudentListBaseAdapter extends BaseAdapter implements Filterable {
                 StudentListBaseAdapter.this.notifyDataSetChanged();
             }
         };
-
-        return searchFilter;
     }
 
     private class ViewHolder {
         TextView txtMssv, txtHoten, txtEmail;
+        CheckBox cbSelect;
     }
 }

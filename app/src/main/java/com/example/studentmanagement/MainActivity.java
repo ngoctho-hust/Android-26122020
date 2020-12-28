@@ -3,11 +3,15 @@ package com.example.studentmanagement;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.ContextMenu;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -39,10 +43,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        File storagePath = getApplication().getFilesDir();
-
-        String myDBPath = storagePath + "/" + "student_management";
-        db = SQLiteDatabase.openDatabase(myDBPath, null, SQLiteDatabase.CREATE_IF_NECESSARY);
+        openDB();
 
 //        db.beginTransaction();
 //        try {
@@ -84,6 +85,9 @@ public class MainActivity extends AppCompatActivity {
 
         lvStudents = findViewById(R.id.lv_students);
         lvStudents.setAdapter(adapter);
+
+        registerForContextMenu(lvStudents);
+        lvStudents.setLongClickable(true);
 
         lvStudents.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -174,6 +178,94 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
+        super.onCreateContextMenu(menu, v, menuInfo);
+        menu.add(0, 101, 0, "Edit");
+        menu.add(0, 102, 1, "Delete");
+    }
+
+    @Override
+    public boolean onContextItemSelected(@NonNull MenuItem item) {
+        AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
+        Student selectedStudent = studentsList.get(info.position);
+
+        int id = item.getItemId();
+
+        if (id == 101) {
+            Dialog addStudentDialog = new Dialog(MainActivity.this);
+
+            addStudentDialog.setContentView(R.layout.add_student_dialog);
+            EditText edtMssv = addStudentDialog.findViewById(R.id.edt_mssv);
+            EditText edtHoten = addStudentDialog.findViewById(R.id.edt_hoten);
+            DatePicker dpNgaysinh = addStudentDialog.findViewById(R.id.edt_ngaysinh);
+            EditText edtEmail = addStudentDialog.findViewById(R.id.edt_email);
+            EditText edtDiachi = addStudentDialog.findViewById(R.id.edt_diachi);
+
+            // set data
+            edtMssv.setText(selectedStudent.getMssv());
+            edtHoten.setText(selectedStudent.getHoten());
+            String[] date = selectedStudent.getNgaysinh().split("-");
+            dpNgaysinh.updateDate(Integer.parseInt(date[2]), Integer.parseInt(date[1]), Integer.parseInt(date[0]));
+            edtEmail.setText(selectedStudent.getEmail());
+            edtDiachi.setText(selectedStudent.getDiachi());
+
+            ((Button) addStudentDialog.findViewById(R.id.btn_close)).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    addStudentDialog.dismiss();
+                }
+            });
+
+            ((Button) addStudentDialog.findViewById(R.id.btn_save)).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    selectedStudent.setMssv(edtMssv.getText().toString());
+                    selectedStudent.setHoten(edtHoten.getText().toString());
+                    selectedStudent.setNgaysinh(dpNgaysinh.getDayOfMonth() + "-" + dpNgaysinh.getMonth() + "-" + dpNgaysinh.getYear());
+                    selectedStudent.setEmail(edtEmail.getText().toString());
+                    selectedStudent.setDiachi(edtDiachi.getText().toString());
+
+                    updateStudentToDB(selectedStudent);
+                    getDataFromDB();
+                    adapter.notifyDataSetChanged();
+
+                    Toast.makeText(MainActivity.this, "Cap nhat thong tin sinh vien thanh cong!", Toast.LENGTH_SHORT).show();
+                    addStudentDialog.dismiss();
+                }
+            });
+
+            addStudentDialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            addStudentDialog.setCanceledOnTouchOutside(true);
+            addStudentDialog.show();
+        } else if (id == 102) {
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("Delete student")
+                    .setMessage("Cannot undo")
+                    .setIcon(R.drawable.ic_baseline_delete_24)
+                    .setPositiveButton("Delete",
+                            new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    deleteStudentFromDB(selectedStudent.getId());
+                                    getDataFromDB();
+                                    adapter.notifyDataSetChanged();
+                                    Toast.makeText(MainActivity.this, "Xoa thong tin sinh vien thanh cong!", Toast.LENGTH_SHORT).show();
+                                }
+                            })
+                    .setNeutralButton("Cancel",
+                            new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    dialog.dismiss();
+                                }
+                            })
+                    .create()
+                    .show();
+        }
+        return super.onContextItemSelected(item);
+    }
+
+    @Override
     protected void onStop() {
         db.close();
         super.onStop();
@@ -184,7 +276,7 @@ public class MainActivity extends AppCompatActivity {
 
         try {
             String[] args = {student.getMssv(), student.getHoten(), student.getNgaysinh() , student.getEmail(), student.getDiachi()};
-            db.execSQL("INSERT INTO students(mssv, hoten, ngaysinh, email, diachi) values (?, ?, ?, ?, ?)", args);
+            db.execSQL("INSERT INTO students(mssv, hoten, ngaysinh, email, diachi) values (?, ?, ?, ?, ?);", args);
 
             db.setTransactionSuccessful();
         } catch (Exception e) {
@@ -194,10 +286,59 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void updateStudentToDB(Student student) {
+        if (!db.isOpen()) {
+            openDB();
+        }
+
+        db.beginTransaction();
+
+        try {
+            String[] args = {student.getMssv(), student.getHoten(), student.getNgaysinh() , student.getEmail(), student.getDiachi(), String.valueOf(student.getId())};
+            db.execSQL("UPDATE students SET mssv = ?, hoten = ?, ngaysinh = ?, email = ?, diachi = ? WHERE id = ?;", args);
+
+            db.setTransactionSuccessful();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    private void deleteStudentFromDB(int studentId) {
+        if (!db.isOpen()) {
+            openDB();
+        }
+
+        db.beginTransaction();
+
+        try {
+            db.execSQL("DELETE from students  WHERE id == " + studentId + ";");
+
+            db.setTransactionSuccessful();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    private void openDB() {
+        File storagePath = getApplication().getFilesDir();
+
+        String myDBPath = storagePath + "/" + "student_management";
+        db = SQLiteDatabase.openDatabase(myDBPath, null, SQLiteDatabase.CREATE_IF_NECESSARY);
+    }
+
     private void getDataFromDB() {
+        if (!db.isOpen()) {
+            openDB();
+        }
+
         String columns[] = {"id", "mssv", "hoten", "ngaysinh", "email", "diachi"};
         Cursor cs = db.query("students", columns, null, null, null, null, null);
 
+        studentsList.removeAll(studentsList);
         cs.moveToFirst();
         do {
             int id = cs.getInt(0);
